@@ -1,0 +1,17 @@
+CANTEA - QUICK START
+
+1. Extract ALL files into a NEW folder.
+2. Double-click START_CANTEA.bat.
+3. Wait for first-run installation. The website opens automatically.
+4. Keep the terminal window open while using Cantea.
+
+Python 3.10+ and internet are required for the first setup.
+Node.js is NOT required unless you edit/rebuild the website.
+
+Use your existing account. Forgotten owner password?
+Double-click OWNER_ACCOUNT.bat and follow the prompts.
+
+Use the website address printed by the launcher, not an old saved IP address.
+Online payments need Razorpay credentials; pay-at-counter works without them.
+
+Detailed instructions: README.md

@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Cantea",
+    "slug": "cantea",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "cantea",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#174C3C"
+    },
+    "android": {
+      "package": "com.yourcompany.cantea",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#174C3C"
+      },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ]
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}
