@@ -19,3 +19,4 @@ typing-inspection==0.4.4
 typing_extensions==4.16.0
 tzdata==2026.5
 uvicorn==0.34.2
+psycopg[binary]==3.2.6
