@@ -77,6 +77,7 @@ async function request<T>(
 }
 
 export const api = {
+  changePassword: (current_password: string, new_password: string) => request<{ok: boolean}>('/me/password', {method: 'POST', body: JSON.stringify({current_password, new_password})}),
   // Public
   fetchCanteens: () => request<Canteen[]>('/canteens'),
   fetchPaymentConfig: () => request<PaymentConfig>('/payment-config'),
@@ -136,6 +137,11 @@ export const api = {
     request<{ url: string }>(`/orders/${orderId}/checkout`, {
       method: 'POST',
     }),
+
+  ownerInventoryHistory: () => request<Array<{id: number; item_name: string; delta: number; balance: number; reason: string; created: number}>>('/owner/inventory/history'),
+  ownerAdjustInventory: (id: string, delta: number, reason: string, requestId: string) =>
+    request<{stock: number}>(`/owner/inventory/${id}/adjust`, {method: 'POST', body: JSON.stringify({delta, reason, request_id: requestId})}),
+  ownerAddSuggestions: () => request<{added: number}>('/owner/menu-suggestions', {method: 'POST'}),
 
   // Owner Operations
   ownerChangeStatus: (orderId: string, status: 'preparing' | 'ready' | 'collected', pickup_code = '') =>

@@ -635,6 +635,7 @@ def record_cash(oid: str, authorization: str = Header(default='')):
 
 
 class MenuIn(BaseModel):
+    expected_stock: int | None = Field(default=None, strict=True, ge=0)
     name: str = Field(min_length=2,max_length=80)
     category: str = Field(min_length=2,max_length=30)
     price: int = Field(strict=True,ge=100,le=100000)
@@ -661,6 +662,14 @@ def add_menu(body: MenuIn, authorization: str = Header(default='')):
 def update_menu(mid: str, body: MenuIn, authorization: str = Header(default='')):
     with db() as conn:
         user = auth(conn,authorization,True)
+        current = conn.execute('SELECT stock FROM menu WHERE id=? AND canteen_id=?', (mid, user['canteen_id'])).fetchone()
+        if not current:
+            fail(404, 'Item not found')
+        if body.expected_stock is not None:
+            if body.stock == body.expected_stock:
+                body.stock = current['stock']
+            elif current['stock'] != body.expected_stock:
+                fail(409, 'Stock changed while you were editing. Reopen the meal and try again.')
         row = conn.execute('UPDATE menu SET name=?,category=?,price=?,stock=?,active=?,vegetarian=?,allergens=? WHERE id=? AND canteen_id=?',
             (body.name,body.category,body.price,body.stock,int(body.active),int(body.vegetarian),body.allergens,mid,user['canteen_id']))
         if row.rowcount!=1:
@@ -674,6 +683,8 @@ def update_menu(mid: str, body: MenuIn, authorization: str = Header(default=''))
 def delete_menu(mid: str, authorization: str = Header(default='')):
     with db() as conn:
         user = auth(conn,authorization,True)
+        if not conn.execute('SELECT 1 FROM menu WHERE id=? AND canteen_id=?', (mid, user['canteen_id'])).fetchone():
+            fail(404, 'Item not found')
         in_orders = conn.execute('SELECT 1 FROM order_items WHERE menu_id=?', (mid,)).fetchone()
         if in_orders:
             conn.execute('UPDATE menu SET active=0 WHERE id=? AND canteen_id=?', (mid, user['canteen_id']))
@@ -884,9 +895,9 @@ def payment_page(ticket: str):
                           'currency':'INR','name':'Cantea','description':'Canteen pickup order','theme':{'color':'#1B5747'}})
     return '''<!doctype html><html><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cantea payment</title>
     <body style="font:20px system-ui;padding:40px;background:#f7f5ed"><h1>Cantea</h1><p id="message">Pay securely, then return to the app.</p>
-    <button id="pay" style="padding:20px">Pay now</button><script src="https://checkout.razorpay.com/v1/checkout.js"></script><script>
+    <a href="/" style="display:block;margin-bottom:20px">Return to Cantea</a><button id="pay" style="padding:20px">Pay now</button><script src="https://checkout.razorpay.com/v1/checkout.js"></script><script>
     const options='''+config+'''; options.handler=async function(result){
-      const response=await fetch('/payments/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(result)});
+      const response=await fetch(new URL('../payments/verify', location.href),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(result)});
       const data=await response.json(); document.getElementById('message').textContent=response.ok?'Payment checked. Return to Cantea and refresh.':(data.detail||'Verification pending. Return to the app.');
     }; document.getElementById('pay').onclick=()=>new Razorpay(options).open();</script></body></html>'''
 
@@ -985,3 +996,155 @@ def deletion_page():
     <p>In Cantea, open Account and choose Delete account after orders and refunds are settled.</p>
     <p>If you cannot sign in, email <a href="mailto:{email}">{email}</a> with subject Cantea account deletion. The operator will verify ownership and handle the request.
     Profile details and sessions are removed; anonymized transaction records are retained for reconciliation. See the privacy notice for the operator's retention terms.</p></body></html>'''
+
+
+class StockAdjustmentIn(BaseModel):
+    delta: int = Field(strict=True, ge=-100000, le=100000)
+    reason: str = Field(min_length=3, max_length=200)
+    request_id: str = Field(min_length=8, max_length=100)
+
+
+@app.get('/owner/inventory/history')
+def inventory_history(authorization: str = Header(default='')):
+    with db() as conn:
+        user = auth(conn, authorization, True)
+        return [dict(row) for row in conn.execute(
+            'SELECT * FROM stock_movements WHERE canteen_id=? ORDER BY id DESC LIMIT 100',
+            (user['canteen_id'],)).fetchall()]
+
+
+@app.post('/owner/inventory/{mid}/adjust')
+def adjust_inventory(mid: str, body: StockAdjustmentIn, authorization: str = Header(default='')):
+    if not body.delta or not body.reason.strip():
+        fail(422, 'Enter a non-zero quantity and a reason')
+    with db() as conn:
+        user = auth(conn, authorization, True)
+        row = conn.execute('SELECT * FROM menu WHERE id=? AND canteen_id=?',
+                           (mid, user['canteen_id'])).fetchone()
+        if not row:
+            fail(404, 'Item not found')
+        key = 'inventory:' + body.request_id
+        previous = conn.execute('SELECT action FROM audit WHERE actor=? AND order_id=?',
+                                (user['id'], key)).fetchone()
+        payload = json.dumps([mid, body.delta, body.reason.strip()])
+        if previous:
+            if previous['action'] != payload:
+                fail(409, 'This request identifier was already used')
+            return {'stock': row['stock']}
+        balance = row['stock'] + body.delta
+        if balance < 0 or balance > 100000:
+            fail(409, 'Adjustment exceeds available stock or the stock limit. Refresh and try again.')
+        conn.execute('UPDATE menu SET stock=? WHERE id=?', (balance, mid))
+        conn.execute('UPDATE stock_movements SET reason=?,actor=? WHERE id=(SELECT max(id) FROM stock_movements WHERE menu_id=?)',
+                     (body.reason.strip(), user['id'], mid))
+        audit(conn, user['id'], key, payload)
+        return {'stock': balance}
+
+
+EXTRA_MENU = [
+    ('Upma', 'Breakfast', 3000, 'Warm semolina with vegetables and curry leaves.', 'Wheat'),
+    ('Misal Pav', 'Breakfast', 6000, 'Spiced sprouts with farsan and two pav.', 'Wheat'),
+    ('Medu Vada', 'Breakfast', 4000, 'Two crisp lentil vadas with chutney.', ''),
+    ('Masala Dosa', 'Breakfast', 6500, 'Rice dosa with potato filling, sambar and chutney.', ''),
+    ('Aloo Paratha', 'Breakfast', 5000, 'Potato-stuffed paratha with curd.', 'Wheat, Milk'),
+    ('Dal Khichdi', 'Lunch', 7000, 'Rice and lentils cooked with mild spices.', ''),
+    ('Rajma Rice', 'Lunch', 8000, 'Kidney bean curry with steamed rice.', ''),
+    ('Veg Pulao', 'Lunch', 6500, 'Rice cooked with vegetables and whole spices.', ''),
+    ('Vada Pav', 'Snacks', 2000, 'Potato vada in pav with dry garlic chutney.', 'Wheat, Peanuts'),
+    ('Samosa', 'Snacks', 2000, 'Crisp pastry with a spiced potato filling.', 'Wheat'),
+    ('Cold Coffee', 'Drinks', 5000, 'Chilled milk coffee.', 'Milk'),
+    ('Fresh Lime Water', 'Drinks', 2500, 'Fresh lemon water with sugar and a pinch of salt.', ''),
+]
+
+
+@app.post('/owner/menu-suggestions')
+def add_menu_suggestions(authorization: str = Header(default='')):
+    with db() as conn:
+        user = auth(conn, authorization, True)
+        added = 0
+        for name, category, price, description, allergens in EXTRA_MENU:
+            if conn.execute('SELECT 1 FROM menu WHERE canteen_id=? AND lower(trim(name))=lower(?)',
+                            (user['canteen_id'], name)).fetchone():
+                continue
+            mid = secrets.token_hex(12)
+            conn.execute('INSERT INTO menu VALUES(?,?,?,?,?,?,?,?,?)',
+                         (mid, user['canteen_id'], name, category, price, 0, 1, 1, allergens))
+            conn.execute('INSERT INTO menu_media VALUES(?,?,?)', (mid, '', description))
+            added += 1
+        audit(conn, user['id'], None, f'Added {added} menu suggestions with zero opening stock')
+        return {'added': added}
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+@app.post('/me/password')
+def change_password(body: PasswordChange, authorization: str = Header(default='')):
+    with db() as conn:
+        user = auth(conn, authorization)
+        if not password_ok(body.current_password, user['password']):
+            fail(403, 'Current password is incorrect')
+        conn.execute('UPDATE users SET password=? WHERE id=?', (password_hash(body.new_password), user['id']))
+        conn.execute('DELETE FROM sessions WHERE user_id=? AND digest<>?', (user['id'], digest(authorization[7:])))
+        audit(conn, user['id'], None, 'Password changed; other sessions revoked')
+    return {'ok': True}
+
+
+class OwnerSetup(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=10, max_length=128)
+    name: str = Field(min_length=1, max_length=100)
+    canteen_id: str = Field(default='campus-demo', max_length=100)
+    canteen_name: str = Field(default='Campus Canteen', min_length=1, max_length=100)
+    organization: str = Field(default='My College', min_length=1, max_length=100)
+
+
+@app.post('/setup/owner')
+def setup_owner(body: OwnerSetup, x_setup_token: str = Header(default='')):
+    expected = os.getenv('OWNER_SETUP_TOKEN', '')
+    if not expected or not secrets.compare_digest(expected, x_setup_token):
+        fail(403, 'Open the private owner setup link from OWNER_ACCOUNT.bat, or enter your hosting OWNER_SETUP_TOKEN.')
+    email = body.email.strip().lower()
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        fail(422, 'Enter a valid email')
+    with db() as conn:
+        canteen = conn.execute('SELECT id FROM canteens WHERE id=?', (body.canteen_id,)).fetchone()
+        if not canteen:
+            if conn.execute('SELECT 1 FROM canteens').fetchone():
+                fail(404, 'Select an existing canteen')
+            conn.execute('INSERT INTO canteens(id,name,organization) VALUES(?,?,?)', (body.canteen_id,body.canteen_name,body.organization))
+            conn.execute('INSERT INTO canteen_settings(canteen_id) VALUES(?)', (body.canteen_id,))
+            ensure_slots(conn, body.canteen_id)
+        user = conn.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
+        if user:
+            if user['role'] != 'owner' or user['deleted'] or user['canteen_id'] != body.canteen_id:
+                fail(409, 'This email belongs to another account. Use a different owner email.')
+            conn.execute('UPDATE users SET password=? WHERE id=?', (password_hash(body.password),user['id']))
+            conn.execute('DELETE FROM sessions WHERE user_id=?', (user['id'],))
+        else:
+            conn.execute('INSERT INTO users(id,name,email,password,role,canteen_id) VALUES(?,?,?,?,?,?)',
+                (secrets.token_hex(16),body.name,email,password_hash(body.password),'owner',body.canteen_id))
+    seed_extended_menu()
+    return {'ok': True}
+
+
+def seed_extended_menu():
+    # A migration runs once per canteen; never replenish actual inventory implicitly.
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS menu_seed_versions(canteen_id TEXT PRIMARY KEY, version INTEGER)')
+        for c in conn.execute('SELECT id FROM canteens').fetchall():
+            cid = c['id']
+            if conn.execute('SELECT 1 FROM menu_seed_versions WHERE canteen_id=?', (cid,)).fetchone():
+                continue
+            for name, category, price, description, allergens in EXTRA_MENU:
+                if conn.execute('SELECT 1 FROM menu WHERE canteen_id=? AND lower(trim(name))=lower(?)',(cid,name)).fetchone():
+                    continue
+                mid = secrets.token_hex(12)
+                conn.execute('INSERT INTO menu VALUES(?,?,?,?,?,?,?,?,?)',(mid,cid,name,category,price,0,1,1,allergens))
+                conn.execute('INSERT INTO menu_media VALUES(?,?,?)',(mid,'',description))
+            conn.execute('INSERT INTO menu_seed_versions VALUES(?,1)',(cid,))
+
+
+seed_extended_menu()

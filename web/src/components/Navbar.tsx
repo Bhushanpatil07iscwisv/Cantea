@@ -170,12 +170,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
             ) : (
-              <button
+              <><button onClick={() => { setCurrentView('owner'); openAuthModal() }} className="px-2 py-2 text-xs sm:text-sm font-bold text-[#C55D42]">Owner Login</button><button
                 onClick={openAuthModal}
                 className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-[#1B5747] hover:bg-[#144236] text-white text-sm font-bold shadow-xs hover:shadow-sm transition-all focus:outline-none"
               >
                 Sign In
-              </button>
+              </button></>
             )}
 
             {/* Mobile Menu Hamburger */}

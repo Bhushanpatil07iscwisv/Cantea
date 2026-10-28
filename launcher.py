@@ -1,5 +1,6 @@
 """Portable local launcher. No Node installation is needed for the included website build."""
 import hashlib
+import secrets
 import os
 from pathlib import Path
 import shutil
@@ -102,7 +103,12 @@ def serve():
     url = f'http://127.0.0.1:{port}'
     os.environ['PUBLIC_BASE_URL'] = url + '/api'
     try:
-        accounts()
+        setup_token = secrets.token_urlsafe(32)
+        os.environ["OWNER_SETUP_TOKEN"] = setup_token
+        from app import db
+        with db() as conn:
+            needs_setup = not conn.execute("SELECT 1 FROM users WHERE role='owner' AND deleted=0").fetchone()
+        open_url = url + ("/#setup=" + setup_token if needs_setup or "owner" in sys.argv else "")
         from server import app
         import uvicorn
         print(f'\nCantea website: {url}\nKeep this window open. Press Ctrl+C to stop.\n', flush=True)
@@ -112,7 +118,7 @@ def serve():
                     with urllib.request.urlopen(url + '/api/health', timeout=1) as response:
                         if response.status == 200:
                             if '--no-browser' not in sys.argv:
-                                webbrowser.open(url)
+                                webbrowser.open(open_url)
                             return
                 except OSError:
                     time.sleep(0.2)
@@ -128,7 +134,7 @@ if __name__ == '__main__':
         os.chdir(ROOT)
         bootstrap()
         if 'owner' in sys.argv:
-            accounts(reset=True)
+            serve()
         elif 'rebuild' in sys.argv:
             rebuild()
         else:

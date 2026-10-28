@@ -1,3 +1,5 @@
+import { PaymentStatus } from './PaymentStatus'
+import { InventoryPanel } from './InventoryPanel'
 import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -37,7 +39,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   onConfirmCollection,
   onConfirmRefund,
 }) => {
-  const [activeTab, setActiveTab] = useState<'queue' | 'menu' | 'slots'>('queue')
+  const [activeTab, setActiveTab] = useState<'queue' | 'menu' | 'inventory' | 'slots'>('queue')
   const [orders, setOrders] = useState<Order[]>([])
   const [menu, setMenu] = useState<MenuItem[]>([])
   const [slots, setSlots] = useState<Slot[]>([])
@@ -147,17 +149,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     }
   }
 
+  const stockBusy = useRef(new Set<string>())
+
   // Stock Adjustment
-  const handleQuickStock = async (mealId: string, currentStock: number, delta: number) => {
-    const newStock = Math.max(0, currentStock + delta)
+  const handleQuickStock = async (mealId: string, _currentStock: number, delta: number) => {
+    if (stockBusy.current.has(mealId)) return
+    stockBusy.current.add(mealId)
     try {
-      await api.ownerUpdateStock(mealId, newStock)
-      setMenu((prev) =>
-        prev.map((m) => (m.id === mealId ? { ...m, stock: newStock } : m))
-      )
+      await api.ownerAdjustInventory(mealId, delta, 'Quick menu stock adjustment', crypto.randomUUID())
+      await loadData(true)
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Stock adjustment failed.' })
-    }
+    } finally { stockBusy.current.delete(mealId) }
   }
 
   // Save Settings
@@ -264,7 +267,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           </button>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center bg-[#F0EBE1] p-1 rounded-xl">
+          <div className="flex flex-wrap items-center bg-[#F0EBE1] p-1 rounded-xl">
             <button
               onClick={() => setActiveTab('queue')}
               className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
@@ -280,6 +283,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               }`}
             >
               Menu & Stock
+            </button>
+            <button onClick={() => setActiveTab('inventory')}
+              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold ${activeTab === 'inventory' ? 'bg-[#1B5747] text-white' : 'text-[#4A5D55]'}`}>
+              Inventory
             </button>
             <button
               onClick={() => setActiveTab('slots')}
@@ -625,6 +632,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           )}
         </div>
       )}
+
+      <PaymentStatus />
+      {activeTab === 'inventory' && <InventoryPanel onChange={() => loadData(true)} />}
 
       {/* TAB 2: MENU & INVENTORY */}
       {activeTab === 'menu' && (

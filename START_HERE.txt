@@ -1,17 +1,22 @@
-CANTEA - QUICK START
+CANTEA - START HERE
 
-1. Extract ALL files into a NEW folder.
-2. Double-click START_CANTEA.bat.
-3. Wait for first-run installation. The website opens automatically.
-4. Keep the terminal window open while using Cantea.
+1. Extract the ZIP completely into a new folder. Do not run inside the ZIP.
+2. Close any old Cantea server windows.
+3. Double-click START_CANTEA.bat. The browser opens automatically.
+   Python 3.10+ is required; dependencies install on first start.
+   Leave the server window open. No account details need typing there.
+4. Click Owner Login at the top of the website.
+5. If you do not know the owner password: close the server window,
+   double-click OWNER_ACCOUNT.bat, and fill in the browser form.
+   Use the existing owner email to reset it, or a new email to create an owner.
+6. Sign in. The Kitchen Dashboard opens. Select Inventory.
+   Choose an item > Receive / prepare portions > quantity > reason > Save.
+7. Menu management lets you add/edit prices, images, availability and items.
+8. Click your name > Change password to change a signed-in account password.
 
-Python 3.10+ and internet are required for the first setup.
-Node.js is NOT required unless you edit/rebuild the website.
+12 additional menu items are added automatically without changing existing stock.
+New items start at zero: enter the actual prepared quantities in Inventory.
 
-Use your existing account. Forgotten owner password?
-Double-click OWNER_ACCOUNT.bat and follow the prompts.
-
-Use the website address printed by the launcher, not an old saved IP address.
-Online payments need Razorpay credentials; pay-at-counter works without them.
-
-Detailed instructions: README.md
+Online payments use Razorpay. Expand Online payments in the owner dashboard
+for configuration. Cash works without gateway credentials.
+This ZIP includes a website build; Node is only needed to rebuild source changes.

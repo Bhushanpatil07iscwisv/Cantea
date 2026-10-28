@@ -1,3 +1,4 @@
+import { api } from '../api'
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { X, AlertTriangle, LogOut, Trash2 } from 'lucide-react'
@@ -19,6 +20,12 @@ const AccountModalForm: React.FC<AccountModalProps> = ({ isOpen, onClose }) => {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [passwordMessage, setPasswordMessage] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
 
   if (!isOpen || !user) return null
 
@@ -91,6 +98,19 @@ const AccountModalForm: React.FC<AccountModalProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
+          <form className="space-y-3 border-t pt-4" onSubmit={async e => {
+            e.preventDefault(); setPasswordMessage('')
+            if (newPassword !== confirmation) { setPasswordMessage('New passwords do not match.'); return }
+            setSavingPassword(true)
+            try { await api.changePassword(currentPassword, newPassword); setCurrentPassword(''); setNewPassword(''); setConfirmation(''); setPasswordMessage('Password updated. Other devices have been signed out.') }
+            catch (error) { setPasswordMessage(error instanceof Error ? error.message : 'Could not change password.') }
+            finally { setSavingPassword(false) }
+          }}>
+            <h4 className="font-bold">Change password</h4>
+            {[[currentPassword, setCurrentPassword, 'Current password'], [newPassword, setNewPassword, 'New password'], [confirmation, setConfirmation, 'Confirm new password']].map(([value, setter, label], i) => <label className="block text-xs" key={i}>{label as string}<input className="block w-full border rounded-xl p-2 mt-1" type="password" required minLength={i ? 10 : 1} maxLength={128} autoComplete={i ? 'new-password' : 'current-password'} value={value as string} onChange={e => (setter as (s: string) => void)(e.target.value)} /></label>)}
+            <p role="status" className="text-sm">{passwordMessage}</p>
+            <button disabled={savingPassword} className="rounded-xl bg-[#1B5747] text-white px-4 py-2 disabled:opacity-50">{savingPassword ? 'Saving…' : 'Update password'}</button>
+          </form>
           {/* Delete Account Safeguard */}
           <div className="pt-3 border-t border-[#F0EBE1] space-y-3">
             {deleteError && (

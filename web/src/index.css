@@ -67,3 +67,8 @@
 .animate-badge-pop {
   animation: badge-pulse 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+button { cursor: pointer; transition: background-color .18s, transform .18s, opacity .18s; }
+button:active:not(:disabled) { transform: scale(.98); }
+button:disabled { cursor: not-allowed; opacity: .6; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid #E07A5F; outline-offset: 3px; }

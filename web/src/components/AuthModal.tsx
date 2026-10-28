@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext'
 interface AuthModalProps {
   isOpen: boolean
   onClose: () => void
+  owner?: boolean
+  onSuccess?: (role: string) => void
 }
 
 export const AuthModal: React.FC<AuthModalProps> = (props) => {
@@ -13,8 +15,9 @@ export const AuthModal: React.FC<AuthModalProps> = (props) => {
   return <AuthModalForm key={'open'} {...props} />
 }
 
-const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose, owner = false, onSuccess }) => {
   const { login, register, canteens, selectedCanteen } = useAuth()
+  const [ownerMode, setOwnerMode] = useState(owner)
   const [mode, setMode] = useState<'login' | 'register'>('login')
 
   const [name, setName] = useState('')
@@ -33,7 +36,8 @@ const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
     try {
       if (mode === 'login') {
-        await login(email, password)
+        const signedIn = await login(email, password)
+        onSuccess?.(signedIn.role)
       } else {
         if (!name.trim()) throw new Error('Please enter your full name')
         await register(name, email, password, canteenId)
@@ -47,6 +51,7 @@ const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   }
 
   const fillDemo = (role: 'student' | 'owner') => {
+    setOwnerMode(role === 'owner')
     setEmail('')
     setPassword('')
     setMode(role === 'student' ? 'register' : 'login')
@@ -77,11 +82,11 @@ const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-2xl font-black text-[#162B23]">
-                {mode === 'login' ? 'Welcome Back' : 'Create Student Account'}
+                {mode === 'login' ? (ownerMode ? 'Owner Login' : 'Welcome Back') : 'Create Student Account'}
               </h3>
               <p className="text-xs text-[#5C6E66] mt-0.5">
                 {mode === 'login'
-                  ? 'Sign in to access your tokens and order history.'
+                  ? (ownerMode ? 'Manage inventory, menu, orders and opening hours.' : 'Sign in to access your tokens and order history.')
                   : 'Register to pre-order food and avoid queues.'}
               </p>
             </div>
@@ -110,6 +115,7 @@ const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <button
               type="button"
               onClick={() => {
+                setOwnerMode(false)
                 setMode('register')
                 setError(null)
               }}
@@ -152,6 +158,7 @@ const AuthModalForm: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             </div>
           )}
 
+          {ownerMode && <a href="#setup" onClick={e => { e.preventDefault(); location.hash = 'setup'; location.reload() }} className="block text-sm text-[#1B5747] underline">Set up or recover owner account</a>}
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-3.5">
             {mode === 'register' && (

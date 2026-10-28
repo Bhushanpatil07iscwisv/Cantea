@@ -62,6 +62,7 @@ const MealModalForm: React.FC<MealModalProps> = ({
         category: category.trim(),
         price: pricePaise,
         stock: parsedStock,
+        expected_stock: meal?.stock,
         active,
         vegetarian,
         allergens: allergens.trim(),

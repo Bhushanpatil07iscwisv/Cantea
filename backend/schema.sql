@@ -60,3 +60,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 CREATE INDEX IF NOT EXISTS orders_canteen ON orders(canteen_id,created);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS stock_movements (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ canteen_id TEXT NOT NULL, menu_id TEXT NOT NULL, item_name TEXT NOT NULL,
+ delta INTEGER NOT NULL, balance INTEGER NOT NULL,
+ reason TEXT NOT NULL, actor TEXT, created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS stock_movement_canteen ON stock_movements(canteen_id,id);
+CREATE TRIGGER IF NOT EXISTS menu_stock_change AFTER UPDATE OF stock ON menu
+WHEN NEW.stock != OLD.stock
+BEGIN
+ INSERT INTO stock_movements(canteen_id,menu_id,item_name,delta,balance,reason,created)
+ VALUES(NEW.canteen_id,NEW.id,NEW.name,NEW.stock-OLD.stock,NEW.stock,
+ 'Order or menu stock change',CAST(strftime('%s','now') AS INTEGER));
+END;
+CREATE TRIGGER IF NOT EXISTS menu_opening_stock AFTER INSERT ON menu
+BEGIN
+ INSERT INTO stock_movements(canteen_id,menu_id,item_name,delta,balance,reason,created)
+ VALUES(NEW.canteen_id,NEW.id,NEW.name,NEW.stock,NEW.stock,'Opening stock',CAST(strftime('%s','now') AS INTEGER));
+END;

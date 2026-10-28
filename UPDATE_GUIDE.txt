@@ -1,0 +1,46 @@
+CANTEA WEB UPDATE
+
+All daily tasks are in the browser: owner login, inventory, menu edits, orders,
+cancellation decisions, checkout and password changes. Local Windows startup
+still uses a background Python server started by START_CANTEA.bat.
+Owner setup/recovery is now a browser form opened by OWNER_ACCOUNT.bat.
+
+Keep a backup of your existing project. Extract this ZIP into a new folder,
+close old Cantea windows, then follow START_HERE.txt. Your supplied database
+and .env were retained. If your original app has newer orders, copy its latest
+backend/cantea.db into the new folder while both servers are stopped.
+
+GITHUB
+Copy source changes to your existing Git checkout, preserving its .git folder.
+Never commit .env, databases, .venv or node_modules, or this complete private ZIP.
+Use git status and review changes before committing. web/dist is supplied for
+local startup; hosting builds it from source.
+
+HOSTING
+Build: pip install -r backend/requirements-lock.txt && npm --prefix web ci && npm --prefix web run build
+Start: uvicorn server:app --app-dir backend --host 0.0.0.0 --port $PORT --workers 1
+Set PUBLIC_BASE_URL=https://YOUR-DOMAIN/api in the hosting Environment dashboard.
+Set OWNER_SETUP_TOKEN to a long random private value. Open your website, choose
+Owner Login > Set up or recover owner account, and enter that private value.
+Never give this key to students; it allows owner account recovery. Remove the
+hosting variable after setup and restart; set a new one only for recovery.
+
+PAYMENTS
+Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on your hosting Environment dashboard.
+Set RAZORPAY_WEBHOOK_SECRET to the same secret used in your Razorpay webhook.
+Webhook URL: https://YOUR-DOMAIN/api/payments/webhook; event payment.captured.
+Restart the service. Use test keys first. Payment status is shown in the owner
+dashboard; students select Pay online in checkout. Gateway keys belong only
+on the server. For local use these settings go in backend/.env.
+Payment capture/signatures are validated server-side. Live transactions have
+not been tested; use your merchant account to complete a test before launch.
+Refunds must be processed in Razorpay and reconciled in the owner dashboard.
+
+DATA
+A free temporary hosting filesystem loses accounts/orders on restart or redeploy.
+Use a persistent disk and set DB_PATH to a file on it for retained data.
+This update manages prepared menu portions; it does not track ingredient recipes.
+
+VALIDATION
+40 backend tests passed; TypeScript and production Vite build passed.
+Lint has no errors and existing warnings. Real payment credentials were not used.

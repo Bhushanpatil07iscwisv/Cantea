@@ -9,6 +9,7 @@ import { CartSidebar } from './components/CartSidebar'
 import { OrderConfirmedModal } from './components/OrderConfirmedModal'
 import { OrdersView } from './components/OrdersView'
 import { OwnerDashboard } from './components/OwnerDashboard'
+import { OwnerSetup } from './components/OwnerSetup'
 import { AuthModal } from './components/AuthModal'
 import { AccountModal } from './components/AccountModal'
 import { EditOrderModal } from './components/EditOrderModal'
@@ -269,7 +270,7 @@ const MainApp: React.FC = () => {
                 Kitchen Dashboard
               </button>
             ) : (
-              <button onClick={() => setAuthModalOpen(true)} className="hover:text-[#162B23]">
+              <button onClick={() => setCurrentView('owner')} className="hover:text-[#162B23]">
                 Owner Portal
               </button>
             )}
@@ -302,7 +303,10 @@ const MainApp: React.FC = () => {
         onViewOrders={() => setCurrentView('orders')}
       />
 
+      <OwnerSetup />
       <AuthModal
+        owner={currentView === 'owner'}
+        onSuccess={role => setCurrentView(role === 'owner' ? 'owner' : 'menu')}
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
       />
