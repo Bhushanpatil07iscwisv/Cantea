@@ -4,9 +4,8 @@ import hmac
 import json
 import os
 import secrets
-import sqlite3
 import time
-from contextlib import contextmanager
+from database import connect, initialize, INTEGRITY_ERRORS
 from datetime import datetime, timedelta, time as dt_time, timezone
 from pathlib import Path
 from typing import Literal
@@ -23,6 +22,7 @@ BACKEND_DIR = Path(__file__).resolve().parent
 load_dotenv(BACKEND_DIR / '.env')
 _db_path = Path(os.getenv('DB_PATH', 'cantea.db'))
 DB_PATH = str(_db_path if _db_path.is_absolute() else BACKEND_DIR / _db_path)
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 BASE = os.getenv('PUBLIC_BASE_URL', 'http://localhost:8000').rstrip('/')
 app = FastAPI(title='Cantea', version='0.1.0')
 
@@ -63,21 +63,8 @@ def password_ok(password, stored):
         return False
 
 
-@contextmanager
 def db():
-    conn = sqlite3.connect(DB_PATH, timeout=20, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys=ON')
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.execute('BEGIN IMMEDIATE')
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    return connect(DATABASE_URL, DB_PATH)
 
 
 DEFAULT_MEDIA = {
@@ -90,14 +77,13 @@ DEFAULT_MEDIA = {
 
 
 def init_db():
-    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.executescript(Path(__file__).with_name('schema.sql').read_text())
+    initialize(DATABASE_URL, DB_PATH)
+    with db() as conn:
         # Populate default meal media if missing
         for name, (img, desc) in DEFAULT_MEDIA.items():
             rows = conn.execute('SELECT id FROM menu WHERE name=?', (name,)).fetchall()
             for r in rows:
-                conn.execute('INSERT OR IGNORE INTO menu_media(menu_id, image_url, description) VALUES(?,?,?)', (r[0], img, desc))
+                conn.execute('INSERT INTO menu_media(menu_id, image_url, description) VALUES(?,?,?) ON CONFLICT DO NOTHING', (r[0], img, desc))
 
 
 
@@ -189,7 +175,9 @@ def session(conn, user_id):
 
 @app.get('/health')
 def health():
-    return {'status': 'ok'}
+    with db() as conn:
+        conn.execute('SELECT 1').fetchone()
+    return {'status': 'ok', 'database': 'postgresql' if DATABASE_URL else 'sqlite'}
 
 
 @app.get('/canteens')
@@ -274,7 +262,7 @@ def ensure_slots(conn, canteen_id: str, days: int = 7):
         return 0
     settings = conn.execute('SELECT * FROM canteen_settings WHERE canteen_id=?', (canteen_id,)).fetchone()
     if not settings:
-        conn.execute('INSERT OR IGNORE INTO canteen_settings(canteen_id) VALUES(?)', (canteen_id,))
+        conn.execute('INSERT INTO canteen_settings(canteen_id) VALUES(?) ON CONFLICT DO NOTHING', (canteen_id,))
         settings = conn.execute('SELECT * FROM canteen_settings WHERE canteen_id=?', (canteen_id,)).fetchone()
 
     if settings and settings['is_closed']:
@@ -322,7 +310,7 @@ def ensure_slots(conn, canteen_id: str, days: int = 7):
 
             sid = secrets.token_hex(12)
             cur = conn.execute(
-                'INSERT OR IGNORE INTO slots(id, canteen_id, starts, ends, capacity) VALUES(?,?,?,?,?)',
+                'INSERT INTO slots(id, canteen_id, starts, ends, capacity) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING',
                 (sid, canteen_id, starts_utc, ends_utc, slot_capacity)
             )
             if cur.rowcount > 0:
@@ -654,7 +642,7 @@ def add_menu(body: MenuIn, authorization: str = Header(default='')):
         mid=secrets.token_hex(12)
         conn.execute('INSERT INTO menu VALUES(?,?,?,?,?,?,?,?,?)',(mid,user['canteen_id'],body.name,body.category,body.price,body.stock,int(body.active),int(body.vegetarian),body.allergens))
         if body.image_url or body.description:
-            conn.execute('INSERT OR REPLACE INTO menu_media(menu_id,image_url,description) VALUES(?,?,?)', (mid, body.image_url, body.description))
+            conn.execute('INSERT INTO menu_media(menu_id,image_url,description) VALUES(?,?,?) ON CONFLICT(menu_id) DO UPDATE SET image_url=excluded.image_url,description=excluded.description', (mid, body.image_url, body.description))
     return {'id':mid}
 
 
@@ -674,7 +662,7 @@ def update_menu(mid: str, body: MenuIn, authorization: str = Header(default=''))
             (body.name,body.category,body.price,body.stock,int(body.active),int(body.vegetarian),body.allergens,mid,user['canteen_id']))
         if row.rowcount!=1:
             fail(404,'Item not found')
-        conn.execute('INSERT OR REPLACE INTO menu_media(menu_id,image_url,description) VALUES(?,?,?)', (mid, body.image_url, body.description))
+        conn.execute('INSERT INTO menu_media(menu_id,image_url,description) VALUES(?,?,?) ON CONFLICT(menu_id) DO UPDATE SET image_url=excluded.image_url,description=excluded.description', (mid, body.image_url, body.description))
         audit(conn,user['id'],None,'menu updated: '+mid)
     return {'ok':True}
 
@@ -727,7 +715,7 @@ def add_slot(body: SlotIn, authorization: str = Header(default='')):
         sid=secrets.token_hex(12)
         try:
             conn.execute('INSERT INTO slots VALUES(?,?,?,?,?)',(sid,user['canteen_id'],body.starts.astimezone(timezone.utc).isoformat(),body.ends.astimezone(timezone.utc).isoformat(),body.capacity))
-        except sqlite3.IntegrityError:
+        except INTEGRITY_ERRORS:
             fail(409,'A slot already starts at that time')
     return {'id':sid}
 
@@ -802,8 +790,11 @@ def update_settings(body: SettingsIn, authorization: str = Header(default='')):
     with db() as conn:
         user = auth(conn,authorization,True)
         conn.execute('''
-            INSERT OR REPLACE INTO canteen_settings(canteen_id, open_time, close_time, slot_duration, slot_capacity, closed_days, is_closed, closure_reason)
-            VALUES(?,?,?,?,?,?,?,?)
+            INSERT INTO canteen_settings(canteen_id, open_time, close_time, slot_duration, slot_capacity, closed_days, is_closed, closure_reason)
+            VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(canteen_id) DO UPDATE SET
+            open_time=excluded.open_time,close_time=excluded.close_time,
+            slot_duration=excluded.slot_duration,slot_capacity=excluded.slot_capacity,
+            closed_days=excluded.closed_days,is_closed=excluded.is_closed,closure_reason=excluded.closure_reason
         ''', (user['canteen_id'], body.open_time, body.close_time, body.slot_duration, body.slot_capacity, body.closed_days, int(body.is_closed), body.closure_reason))
         conn.execute('''DELETE FROM slots WHERE canteen_id=? AND starts>?
             AND NOT EXISTS (SELECT 1 FROM orders WHERE orders.slot_id=slots.id)''',

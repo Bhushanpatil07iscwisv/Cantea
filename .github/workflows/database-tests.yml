@@ -1,0 +1,41 @@
+name: Database regression tests
+on:
+  push:
+    branches: [main, feature/postgres-storage]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cantea_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt pytest==8.3.5
+      - run: npm --prefix web ci && npm --prefix web run build
+      - run: python -m pytest backend/tests -q
+        env:
+          PYTHONPATH: backend
+          DB_PATH: /tmp/cantea-ci-local.db
+          TEST_POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/cantea_test

@@ -52,8 +52,10 @@ def test_packaged_site_and_api_alias(env):
     c=TestClient(app)
     assert c.get('/').status_code==200
     assert '<div id="root">' in c.get('/').text
-    assert c.get('/api/health').json()=={'status':'ok'}
-    assert c.get('/health').json()=={'status':'ok'}
+    health = c.get('/api/health').json()
+    assert health['status'] == 'ok'
+    assert health['database'] == ('postgresql' if module.DATABASE_URL else 'sqlite')
+    assert c.get('/health').json() == health
     assert c.get('/api/canteens').status_code==200
     assert c.get('/api/does-not-exist').status_code==404
     assert c.get('/backend/.env').status_code==404
