@@ -1,3 +1,4 @@
+import { formatClock } from '../time'
 import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -329,7 +330,7 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
                           <span>No upcoming slots currently available</span>
                         </div>
                         <p className="text-[11px] text-amber-800 leading-relaxed">
-                          {slotsInfo?.status_message || 'Canteen is currently closed for orders.'}{' '}
+                          {formatClock(slotsInfo?.status_message || 'Canteen is currently closed for orders.')}{' '}
                           {slotsInfo?.next_opening && (
                             <span>
                               Next order window opens:{' '}

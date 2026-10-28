@@ -1,3 +1,4 @@
+import { formatClock } from '../time'
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -71,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       : 'bg-emerald-500 animate-pulse'
                   }`}
                 />
-                <span className="truncate max-w-42.5">{slotsInfo.status_message}</span>
+                <span className="truncate max-w-42.5">{formatClock(slotsInfo.status_message)}</span>
               </div>
             )}
           </div>
@@ -241,7 +242,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {slotsInfo && (
               <div className="pt-2 border-t border-[#E8E2D5] text-xs text-[#52635D] flex items-center gap-1.5 px-4 py-1">
                 <Clock className="w-3.5 h-3.5 text-[#1B5747]" />
-                <span>{slotsInfo.status_message}</span>
+                <span>{formatClock(slotsInfo.status_message)}</span>
               </div>
             )}
           </motion.div>

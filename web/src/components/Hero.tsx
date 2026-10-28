@@ -1,3 +1,4 @@
+import { formatClock } from '../time'
 import React from 'react'
 import { motion } from 'motion/react'
 import { Clock, ArrowRight, CheckCircle2 } from 'lucide-react'
@@ -74,7 +75,7 @@ export const Hero: React.FC<HeroProps> = ({ onOrderClick, slotsInfo }) => {
                 <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#3C4F47] px-4 py-3 rounded-xl bg-white/70 border border-[#E8E2D5]">
                   <Clock className="w-4 h-4 text-[#1B5747]" />
                   <span>
-                    Hours: {slotsInfo.open_time} – {slotsInfo.close_time} IST
+                    Hours: {formatClock(slotsInfo.open_time)} – {formatClock(slotsInfo.close_time)} IST
                   </span>
                 </div>
               )}
